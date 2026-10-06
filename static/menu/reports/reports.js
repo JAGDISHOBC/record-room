@@ -2046,7 +2046,7 @@ function msrDefaultPayload(year, month){
     month: month,
     meta: {centreName:'', project:'', sector:'', district:'', code:''},
     stock: {
-      milk: { opening: 0, challan_no: '', receipts: [] },   // receipts: [{date, qty}]
+      milk: { opening: 0, challan_no: '', receipts: [] },   // receipts: [{date, qty, challan}]
       sugar: { opening: 0, receipts: [] }
     },
     daily: daily,
@@ -2071,12 +2071,20 @@ function msrRecalc(payload){
 
   // Compute receipts map (per date)
   const milkReceiptMap = {};
+  const milkChallanMap = {};
   (milk.receipts || []).forEach(r => {
-    if (r && r.date) milkReceiptMap[r.date] = (milkReceiptMap[r.date] || 0) + (Number(r.qty) || 0);
+    if (r && r.date) {
+      milkReceiptMap[r.date] = (milkReceiptMap[r.date] || 0) + (Number(r.qty) || 0);
+      if (r.challan) milkChallanMap[r.date] = r.challan;
+    }
   });
   const sugarReceiptMap = {};
+  const sugarChallanMap = {};
   (sugar.receipts || []).forEach(r => {
-    if (r && r.date) sugarReceiptMap[r.date] = (sugarReceiptMap[r.date] || 0) + (Number(r.qty) || 0);
+    if (r && r.date) {
+      sugarReceiptMap[r.date] = (sugarReceiptMap[r.date] || 0) + (Number(r.qty) || 0);
+      if (r.challan) sugarChallanMap[r.date] = r.challan;
+    }
   });
 
   // Opening balance (grams) — includes pre-month receipts
@@ -2123,7 +2131,7 @@ function msrRecalc(payload){
       dayName: row.dayName,
       requested: reqCount,
       served: servedCount,
-      challan_no: i === 0 ? (milk.challan_no || '') : '',
+      challan_no: i === 0 ? (milk.challan_no || '') : (milkChallanMap[date] || ''),
       milk: {
         opening: milkOpening,
         received: milkRecvToday,
@@ -2151,12 +2159,19 @@ function msrRecalc(payload){
   }
 
   payload.daily_computed = computed;
+  var firstDay = computed[0] || {};
+  var milkOpeningStart = (firstDay.milk && Number(firstDay.milk.opening)) || 0;
+  var sugarOpeningStart = (firstDay.sugar && Number(firstDay.sugar.opening)) || 0;
   payload.summary = {
     beneficiaries: totBeneficiaries,
+    milk_opening: milkOpeningStart,
     milk_received: totMilkReceived,
+    milk_total: milkOpeningStart + totMilkReceived,
     milk_used: totMilkUsed,
     milk_closing: milkBal,
+    sugar_opening: sugarOpeningStart,
     sugar_received: totSugarReceived,
+    sugar_total: sugarOpeningStart + totSugarReceived,
     sugar_used: totSugarUsed,
     sugar_closing: sugarBal
   };
@@ -2360,6 +2375,10 @@ function renderMSRStep1(body, isBlank){
             <label>मात्रा (ग्राम)</label>
             <input type="number" id="msrReceiptQty" min="1" step="1" placeholder="जैसे 15000">
           </div>
+          <div class="stock-field" style="min-width:150px;flex:1;">
+            <label>चालान संख्या</label>
+            <input type="text" id="msrReceiptChallan" placeholder="जैसे 17278">
+          </div>
           <button class="stock-btn stock-btn-primary" id="msrAddReceipt" style="min-height:46px;">जोड़ें</button>
         </div>
 
@@ -2416,10 +2435,12 @@ function renderMSRStep1(body, isBlank){
       const qty = Number(document.getElementById('msrReceiptQty').value) || 0;
       if (!date) { showToast('दिनांक भरें', 'error'); return; }
       if (qty <= 0) { showToast('मात्रा 0 से ज्यादा होनी चाहिए', 'error'); return; }
-      const rec = { date, qty };
+      const challan = (document.getElementById('msrReceiptChallan')?.value || '').trim();
+      const rec = { date, qty, challan };
       ReportsMenu.msrPayload.stock[type].receipts.push(rec);
       document.getElementById('msrReceiptDate').value = '';
       document.getElementById('msrReceiptQty').value = '';
+      const chEl = document.getElementById('msrReceiptChallan'); if (chEl) chEl.value = '';
       document.getElementById('msrReceiptList').innerHTML = renderMSRReceiptList(ReportsMenu.msrPayload);
       bindReceiptDelete();
     });
@@ -2792,14 +2813,14 @@ function renderMilkStockSheetHtml(p, isBlank){
     '<td>' + (isBlank ? '' : msrKg((total.beneficiaries || 0) * 10)) + '</td>' +
     '<td>' + (isBlank ? '' : msrKg((total.beneficiaries || 0) * 4)) + '</td>' +
     '<td>' + (isBlank ? '' : escHtml(p.stock.milk.challan_no || '')) + '</td>' +
-    '<td>—</td>' +
+    '<td>' + (isBlank ? '' : msrKg(total.milk_opening || 0)) + '</td>' +
     '<td>' + (isBlank ? '' : msrKg(total.milk_received || 0)) + '</td>' +
-    '<td>—</td>' +
+    '<td>' + (isBlank ? '' : msrKg(total.milk_total || 0)) + '</td>' +
     '<td>' + (isBlank ? '' : msrKg(total.milk_used || 0)) + '</td>' +
     '<td>' + (isBlank ? '' : msrKg(total.milk_closing || 0)) + '</td>' +
-    '<td>—</td>' +
+    '<td>' + (isBlank ? '' : msrKg(total.sugar_opening || 0)) + '</td>' +
     '<td>' + (isBlank ? '' : msrKg(total.sugar_received || 0)) + '</td>' +
-    '<td>—</td>' +
+    '<td>' + (isBlank ? '' : msrKg(total.sugar_total || 0)) + '</td>' +
     '<td>' + (isBlank ? '' : msrKg(total.sugar_used || 0)) + '</td>' +
     '<td>' + (isBlank ? '' : msrKg(total.sugar_closing || 0)) + '</td>' +
     '<td></td>' +
@@ -2819,12 +2840,12 @@ function renderMilkStockSheetHtml(p, isBlank){
   '<div class="msr-title">दूध वितरण एवं स्टॉक पंजिका</div>' +
   '<div class="msr-meta">' +
     '<span class="msr-meta-item">आंगनवाड़ी केन्द्र का नाम - <span class="msr-meta-value">' + cnam + '</span></span>' +
-    '<span class="msr-meta-item">कोड - <span class="msr-meta-value">' + code + '</span></span>' +
     '<span class="msr-meta-item">सेक्टर - <span class="msr-meta-value">' + sect + '</span></span>' +
+    '<span class="msr-meta-item">परियोजना - <span class="msr-meta-value">' + proj + '</span></span>' +
     '<span class="msr-meta-item">जिला - <span class="msr-meta-value">' + dist + '</span></span>' +
+    '<span class="msr-meta-item">कोड - <span class="msr-meta-value">' + code + '</span></span>' +
     '<span class="msr-meta-item">माह - <span class="msr-meta-value">' + escHtml(monthName) + '</span></span>' +
     '<span class="msr-meta-item">वर्ष - <span class="msr-meta-value">' + escHtml(String(year)) + '</span></span>' +
-    '<span class="msr-meta-item">परियोजना - <span class="msr-meta-value">' + proj + '</span></span>' +
   '</div>' +
   '<table class="msr-table">' +
     '<colgroup>' +
@@ -2867,6 +2888,13 @@ function printMilkStockSheet(isBlank){
 
   const clone = sourceSheet.cloneNode(true);
   clone.classList.add('msr-print-active');
+
+  /* Single right-aligned signature only */
+  const sigs = clone.querySelector('.msr-signatures');
+  if (sigs) {
+    sigs.innerHTML = '<div class="msr-sig-block"><div class="msr-sig-space"></div><div class="msr-sig-label">कार्यकर्ता के हस्ताक्षर</div></div>';
+  }
+
   const html = clone.outerHTML;
 
   const iframe = document.createElement('iframe');
@@ -2875,17 +2903,38 @@ function printMilkStockSheet(isBlank){
   document.body.appendChild(iframe);
 
   const doc = iframe.contentDocument;
-  if (!doc) {
-    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-    return;
-  }
+  if (!doc) { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); return; }
+
+  const override_css = [
+    '@page{size:A4 landscape;margin:4mm!important}',
+    'html,body{margin:0;padding:0;background:#fff;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;}',
+    '.msr-sheet,.msr-sheet *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}',
+    '.msr-sheet.msr-print-active{width:289mm!important;max-width:289mm!important;min-width:0!important;height:auto!important;min-height:0!important;max-height:none!important;padding:2mm 3mm!important;margin:0!important;box-sizing:border-box!important;position:relative!important;left:0!important;top:0!important;transform:none!important;overflow:visible!important;box-shadow:none!important;zoom:1!important;}',
+    '.msr-meta{display:flex!important;flex-wrap:nowrap!important;justify-content:space-between!important;gap:1mm!important;font-size:12px!important;line-height:1.2!important;margin-bottom:1.5mm!important;overflow:visible!important;white-space:nowrap!important;width:100%!important;}',
+    '.msr-meta-item{flex:0 1 auto!important;font-size:12px!important;white-space:nowrap!important;text-align:center!important;}',
+    '.msr-meta-value{font-size:12px!important;min-width:0!important;max-width:none!important;padding:0 2px!important;border-bottom:1px dotted #333!important;text-align:center!important;display:inline-block!important;}',
+    '.msr-meta-item:first-child .msr-meta-value{max-width:none!important;}',
+    '.msr-office{font-size:20px!important;line-height:1.1!important;margin:0 0 0.5mm!important;}',
+    '.msr-title{font-size:13px!important;line-height:1.1!important;margin:0 0 1mm!important;}',
+    '.msr-table{font-size:14px!important;}',
+    '.msr-table th,.msr-table td{padding:0.35mm 0.25mm!important;line-height:1.05!important;} .msr-table tbody td{font-size:14px!important;}',
+    '.msr-table th{font-size:10px!important;}.msr-table thead tr:first-child th:nth-child(1),.msr-table thead tr:first-child th:nth-child(2),.msr-table thead tr:first-child th:nth-child(4),.msr-table thead tr:first-child th:nth-child(5){font-size:8px!important;}',
+    '.msr-table tbody td{height:6.2mm!important;}',
+    '.msr-table .msr-total-row td{color:#b0251f!important;font-weight:600!important;border:1.5px solid #b0251f!important;background:#fff8f7!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}',
+    '.msr-table .msr-grp-milk{background:#fff5e8!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}',
+    '.msr-table .msr-grp-sugar{background:#eaf7ec!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}',
+    '.msr-signatures{display:block!important;margin-top:1mm!important;margin-bottom:4mm!important;padding:0!important;text-align:right!important;}',
+    '.msr-signatures .msr-sig-block{display:block!important;width:auto!important;flex:none!important;text-align:right!important;margin-left:auto!important;padding:0!important;}',
+    '.msr-signatures .msr-sig-space{height:4mm!important;width:60mm!important;margin-left:auto!important;}',
+    '.msr-signatures .msr-sig-label{border:0!important;padding:0!important;text-align:right!important;width:60mm!important;margin-left:auto!important;margin-top:1mm!important;font-size:10px!important;font-weight:500!important;}'
+  ].join('');
 
   doc.open();
   doc.write(
     '<!doctype html><html><head><meta charset="utf-8">' +
     '<style>' +
-    'html,body{margin:0;padding:0;background:#fff}' +
     MSR_SHEET_CSS +
+    override_css +
     '</style></head><body>' + html + '</body></html>'
   );
   doc.close();
@@ -2896,5 +2945,5 @@ function printMilkStockSheet(isBlank){
   setTimeout(() => {
     try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch (e) {}
     setTimeout(cleanup, 60000);
-  }, 600);
+  }, 800);
 }
