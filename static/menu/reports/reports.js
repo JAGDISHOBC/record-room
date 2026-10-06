@@ -2947,3 +2947,65 @@ function printMilkStockSheet(isBlank){
     setTimeout(cleanup, 60000);
   }, 800);
 }
+
+/* ===== MILK CLAIM — FORCE LIGHTER + SMALLER (inline) ===== */
+(function(){
+  function apply(){
+    var sheets = document.querySelectorAll('.milk-claim-sheet, .dava-sheet');
+    sheets.forEach(function(s){
+      if(!s.classList.contains('milk-claim-sheet') && !s.classList.contains('dava-sheet')) return;
+
+      // पूरा sheet — font-weight कम
+      s.querySelectorAll('*').forEach(function(el){
+        el.style.setProperty('font-weight','500','important');
+      });
+
+      // Headings को थोड़ा bold
+      s.querySelectorAll('.dava-office, .dava-title, th, b, strong').forEach(function(el){
+        el.style.setProperty('font-weight','600','important');
+      });
+
+      // Table values छोटी
+      s.querySelectorAll('.milk-claim-table td, .milk-claim-table th, .mc-serial, .mc-day, .mc-date, .mc-count').forEach(function(el){
+        el.style.setProperty('font-size','12px','important');
+        el.style.setProperty('font-weight','500','important');
+      });
+
+      s.querySelectorAll('.milk-claim-total-label, .milk-claim-total-count').forEach(function(el){
+        el.style.setProperty('font-size','13px','important');
+        el.style.setProperty('font-weight','600','important');
+      });
+
+      // प्रमाणित पैराग्राफ
+      s.querySelectorAll('.dava-cert').forEach(function(el){
+        el.style.setProperty('font-size','11px','important');
+        el.style.setProperty('font-weight','400','important');
+      });
+
+      // सत्यापित हस्ताक्षर
+      s.querySelectorAll('.dava-approvals').forEach(function(el){
+        el.style.setProperty('font-size','10px','important');
+        el.style.setProperty('font-weight','400','important');
+      });
+
+      // कार्यकर्ता हस्ताक्षर मय मोहर
+      s.querySelectorAll('.dava-worker-sign, .dava-worker-sign *, .dava-seal').forEach(function(el){
+        el.style.setProperty('font-size','10px','important');
+        el.style.setProperty('font-weight','400','important');
+      });
+
+      // Meta
+      s.querySelectorAll('.dava-meta, .dava-meta *, .dava-meta-value').forEach(function(el){
+        el.style.setProperty('font-weight','400','important');
+      });
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', apply);
+  } else {
+    apply();
+  }
+  try{ new MutationObserver(apply).observe(document.body, {childList:true, subtree:true}); }catch(e){}
+  setInterval(apply, 1000);
+})();

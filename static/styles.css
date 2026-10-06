@@ -3327,160 +3327,59 @@ body.app-mode .msr-receipt-item{
   body.app-mode .msr-receipt-grid .stock-btn{grid-column:1 / -1;}
 }
 
-/* ============ MILK STOCK — MOBILE PREVIEW SCROLL ONLY ============ */
-@media(max-width: 900px){
-  /* पूरा page horizontal scroll बंद */
-  html, body, #viewRoot {
-    overflow-x: hidden !important;
-    max-width: 100vw !important;
-  }
-  /* Preview अलग scrollable box बने */
-  .msr-sheet {
-    width: calc(100vw - 12px) !important;
-    max-width: calc(100vw - 12px) !important;
-    min-width: 0 !important;
-    height: auto !important;
-    max-height: 75vh !important;
-    overflow: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    display: block !important;
-    box-sizing: border-box !important;
-    margin: 0 auto !important;
-    padding: 8px !important;
-  }
-  /* अंदर की content चौड़ी रहे ताकि scroll हो सके */
-  .msr-sheet > * {
-    min-width: 1100px !important;
-  }
+/* ===== MILK CLAIM FORM — LIGHTER + SMALLER ===== */
+/* 1. पूरे sheet में font-weight 100 कम */
+.milk-claim-sheet,
+.milk-claim-sheet * {
+  font-weight: 500 !important;
+}
+.milk-claim-sheet .dava-office,
+.milk-claim-sheet .dava-title,
+.milk-claim-sheet th,
+.milk-claim-sheet b,
+.milk-claim-sheet strong {
+  font-weight: 600 !important;
 }
 
-/* ===== PREVIEW = PRINT (screen only, same as iframe override) ===== */
-@media screen {
-  .msr-sheet {
-    width: 289mm !important;
-    max-width: 289mm !important;
-    min-width: 0 !important;
-    height: auto !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    padding: 2mm 3mm !important;
-    margin: 0 auto !important;
-    box-sizing: border-box !important;
-    overflow: visible !important;
-    box-shadow: none !important;
-    zoom: 1 !important;
-  }
-  .msr-meta {
-    display: flex !important;
-    flex-wrap: nowrap !important;
-    justify-content: space-between !important;
-    gap: 1mm !important;
-    font-size: 12px !important;
-    line-height: 1.2 !important;
-    margin-bottom: 1.5mm !important;
-    overflow: visible !important;
-    white-space: nowrap !important;
-    width: 100% !important;
-  }
-  .msr-meta-item {
-    flex: 0 1 auto !important;
-    font-size: 12px !important;
-    white-space: nowrap !important;
-    text-align: center !important;
-  }
-  .msr-meta-value {
-    font-size: 12px !important;
-    min-width: 0 !important;
-    max-width: none !important;
-    padding: 0 2px !important;
-    border-bottom: 1px dotted #333 !important;
-    text-align: center !important;
-    display: inline-block !important;
-  }
-  .msr-meta-item:first-child .msr-meta-value {
-    max-width: none !important;
-  }
-  .msr-office {
-    font-size: 20px !important;
-    line-height: 1.1 !important;
-    margin: 0 0 0.5mm !important;
-  }
-  .msr-title {
-    font-size: 13px !important;
-    line-height: 1.1 !important;
-    margin: 0 0 1mm !important;
-  }
-  .msr-table {
-    font-size: 14px !important;
-  }
-  .msr-table th,
-  .msr-table td {
-    padding: 0.35mm 0.25mm !important;
-    line-height: 1.05 !important;
-  }
-  .msr-table th {
-    font-size: 10px !important;
-  }
-  .msr-table thead tr:first-child th:nth-child(1),
-  .msr-table thead tr:first-child th:nth-child(2),
-  .msr-table thead tr:first-child th:nth-child(4),
-  .msr-table thead tr:first-child th:nth-child(5) {
-    font-size: 8px !important;
-  }
-  .msr-table tbody td {
-    font-size: 14px !important;
-    height: 6.2mm !important;
-  }
-  .msr-table .msr-total-row td {
-    color: #b0251f !important;
-    font-weight: 600 !important;
-    border: 1.5px solid #b0251f !important;
-    background: #fff8f7 !important;
-  }
-  .msr-table .msr-grp-milk { background: #fff5e8 !important; }
-  .msr-table .msr-grp-sugar { background: #eaf7ec !important; }
-  .msr-signatures {
-    display: block !important;
-    margin-top: 1mm !important;
-    margin-bottom: 4mm !important;
-    padding: 0 !important;
-    text-align: right !important;
-  }
-  .msr-signatures .msr-sig-block {
-    display: block !important;
-    width: auto !important;
-    flex: none !important;
-    text-align: right !important;
-    margin-left: auto !important;
-    padding: 0 !important;
-  }
-  .msr-signatures .msr-sig-space {
-    height: 4mm !important;
-    width: 60mm !important;
-    margin-left: auto !important;
-  }
-  .msr-signatures .msr-sig-label {
-    border: 0 !important;
-    padding: 0 !important;
-    text-align: right !important;
-    width: 60mm !important;
-    margin-left: auto !important;
-    margin-top: 1mm !important;
-    font-size: 10px !important;
-    font-weight: 500 !important;
-  }
-  /* Mobile override: preview scroll */
-  @media(max-width: 900px){
-    .msr-sheet {
-      width: calc(100vw - 12px) !important;
-      max-width: calc(100vw - 12px) !important;
-      max-height: 75vh !important;
-      overflow: auto !important;
-      padding: 8px !important;
-      margin: 0 auto !important;
-    }
-    .msr-sheet > * {
-      min-width: 1100px !important;
-    }
-  }
+/* 2. Table values -2pt */
+.milk-claim-table td,
+.milk-claim-table th,
+.milk-claim-table .mc-serial,
+.milk-claim-table .mc-day,
+.milk-claim-table .mc-date,
+.milk-claim-table .mc-count {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+}
+.milk-claim-table .milk-claim-total-label,
+.milk-claim-table .milk-claim-total-count {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+/* 3. प्रमाणित पैराग्राफ -1pt */
+.milk-claim-sheet .dava-cert {
+  font-size: 11px !important;
+  font-weight: 400 !important;
+}
+
+/* 4. सत्यापित हस्ताक्षर -1pt */
+.milk-claim-sheet .dava-approvals {
+  font-size: 10px !important;
+  font-weight: 400 !important;
+}
+
+/* 5. कार्यकर्ता हस्ताक्षर मय मोहर -1pt */
+.milk-claim-sheet .dava-worker-sign,
+.milk-claim-sheet .dava-worker-sign .dava-seal,
+.milk-claim-sheet .dava-worker-sign > div {
+  font-size: 10px !important;
+  font-weight: 400 !important;
+}
+
+/* Meta values lighter too */
+.milk-claim-sheet .dava-meta,
+.milk-claim-sheet .dava-meta-item,
+.milk-claim-sheet .dava-meta-value {
+  font-weight: 400 !important;
 }
