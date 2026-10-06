@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Record Room</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body class="app-mode">
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">📁</div>
+      <div class="sidebar-brand-text">
+        <b>Record Room</b>
+        <small>Data Manager</small>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item" data-view="dashboard">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-text">Dashboard</span>
+      </a>
+      <a href="#" class="nav-item" data-view="family">
+        <span class="nav-icon">👨‍👩‍👧</span>
+        <span class="nav-text">Family Survey</span>
+      </a>
+      <a href="#" class="nav-item" data-view="beneficiaries">
+        <span class="nav-icon">🤱</span>
+        <span class="nav-text">Beneficiaries</span>
+      </a>
+      <a href="#" class="nav-item" data-view="stock">
+        <span class="nav-icon">📦</span>
+        <span class="nav-text">Stock Register</span>
+      </a>
+      <a href="#" class="nav-item" data-view="attendance">
+        <span class="nav-icon">📋</span>
+        <span class="nav-text">Attendance</span>
+      </a>
+      <a href="#" class="nav-item" data-view="holiday">
+        <span class="nav-icon">🎉</span>
+        <span class="nav-text">Holiday</span>
+      </a>
+      <a href="#" class="nav-item" data-view="thr">
+        <span class="nav-icon">🍲</span>
+        <span class="nav-text">THR</span>
+      </a>
+      <a href="#" class="nav-item" data-view="reports">
+        <span class="nav-icon">📊</span>
+        <span class="nav-text">Reports</span>
+      </a>
+      <a href="#" class="nav-item" data-view="settings">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-text">Settings</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <span class="user-avatar">👤</span>
+        <span class="user-name" id="sidebarUser">admin</span>
+      </div>
+      <button class="logout-btn" id="logoutBtn" title="Logout">Logout</button>
+    </div>
+  </aside>
+
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <main class="main-area">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Menu">☰</button>
+    <div id="viewRoot"></div>
+  </main>
+</div>
+<script src="/app.js"></script>
+<script src="/menu/family/family.js"></script>
+<script src="/menu/family/family-add-v3.js"></script>
+
+<script src="/menu/family/family-logs-v2.js"></script>
+<script src="/menu/family/family-detail-v2.js"></script>
+<script src="/menu/family/family-edit-v3.js"></script>
+<script src="/menu/beneficiaries/beneficiaries.js"></script>
+<script src="/menu/stock/stock.js"></script>
+<script src="/menu/stock/stock-thr-recipe.js"></script>
+<script src="/menu/attendance/attendance.js"></script>
+<script src="/menu/thr/thr.js"></script>
+<script src="/menu/settings/settings.js"></script>
+<script src="/menu/reports/reports.js"></script>
+</body>
+</html>

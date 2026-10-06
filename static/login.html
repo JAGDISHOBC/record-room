@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Record Room - Login</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body class="login-mode">
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="login-logo">📁</div>
+      <h1>Record Room</h1>
+      <p>Data Manager</p>
+    </div>
+    <form id="loginForm">
+      <div class="family-field">
+        <label for="username">Username</label>
+        <input id="username" type="text" autocomplete="username" required autofocus>
+      </div>
+      <div class="family-field">
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+      </div>
+      <div id="loginError" class="login-error" style="display:none;"></div>
+      <button type="submit" class="family-btn family-btn-primary login-btn">Sign In</button>
+    </form>
+    <div class="login-hint">Default: admin / admin123</div>
+  </div>
+</div>
+<script>
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = document.getElementById('loginError');
+    err.style.display = 'none';
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin',
+        body: JSON.stringify({username, password})
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Login failed');
+      window.location.href = '/app';
+    } catch (e) {
+      err.textContent = e.message;
+      err.style.display = 'block';
+    }
+  });
+</script>
+</body>
+</html>

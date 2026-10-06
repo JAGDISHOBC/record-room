@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.db-journal
+*.db-wal
+*.db-shm
+.DS_Store
+.env
+*.bak
+*.bak_*
+backup_*.zip
