@@ -179,6 +179,12 @@ function renderFormLanding(type){
         renderMilkClaimForm(action === 'blank' ? 'blank' : 'manual');
       } else if (type === 'MILK_STOCK') {
         renderMilkStockForm(action === 'blank' ? 'blank' : 'manual');
+      } else if (type === 'FORM4') {
+        if (typeof window.renderForm4Form === 'function') {
+          window.renderForm4Form(action === 'blank' ? 'blank' : 'manual');
+        } else {
+          showToast('Form 4 module load नहीं हुआ', 'error');
+        }
       } else {
         showToast('"' + action + '" — यह form अभी बनना बाकी है।', 'info');
       }
@@ -3008,4 +3014,859 @@ function printMilkStockSheet(isBlank){
   }
   try{ new MutationObserver(apply).observe(document.body, {childList:true, subtree:true}); }catch(e){}
   setInterval(apply, 1000);
+})();
+
+/* ==================== FORM 4 (पूरक पोषण दैनिक मासिक) ==================== */
+(function(){
+  if(window.__f4Module) return;
+  window.__f4Module = true;
+
+  const F4_RECIPES = [
+    {code:'SWEET_MURMURA', name:'मीठा मुरमुरा',   days:[1,3,5], weight:'60 ग्राम'},
+    {code:'SALTY_MURMURA', name:'नमकीन मुरमुरा', days:[2,4,6], weight:'60 ग्राम'},
+    {code:'KHICHDI',       name:'खिचड़ी',           days:[1,4],   weight:'60 ग्राम'},
+    {code:'SWEET_DALIA',   name:'मीठा दलिया',      days:[2,5],   weight:'60 ग्राम'},
+    {code:'UPMA',          name:'उपमा',             days:[3,6],   weight:'60 ग्राम'}
+  ];
+  const F4_MONTHS = ['जनवरी','फरवरी','मार्च','अप्रैल','मई','जून','जुलाई','अगस्त','सितंबर','अक्टूबर','नवंबर','दिसंबर'];
+  const F4_DAYS = ['रविवार','सोमवार','मंगलवार','बुधवार','गुरुवार','शुक्रवार','शनिवार'];
+
+  function f4Iso(y,m,d){ return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
+  function f4DaysIn(y,m){ return new Date(y,m,0).getDate(); }
+  function f4Dow(y,m,d){ return new Date(y,m-1,d).getDay(); }
+  function f4Num(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
+  function f4Esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+  window.f4DefaultPayload = function(year, month){
+    const days = f4DaysIn(year, month);
+    const daily = [];
+    for(let d=1; d<=days; d++){
+      const recipes = {};
+      F4_RECIPES.forEach(r => recipes[r.code] = {opening:null,receipt:null,total:null,distribution:null,closing:null});
+      daily.push({
+        date: f4Iso(year, month, d),
+        day: d,
+        dow: f4Dow(year, month, d),
+        holiday: null,
+        boys:'', girls:'', total:'',
+        recipes
+      });
+    }
+    return {
+      year, month,
+      centre: {name:'', code:'', project_name:'', sector_name:'', district:''},
+      daily,
+      month_total: {boys:0, girls:0, total:0},
+      summary: F4_RECIPES.map(r => ({code:r.code, recipe:r.name, opening:0, received:0, total:0, distributed:0, closing:0, receipt_date:null})),
+      recipe_data: F4_RECIPES.reduce((a, r) => { a[r.code] = {opening: 0, receipts: []}; return a; }, {}),
+      special_details: ''
+    };
+  };
+
+  function f4FormatDate(iso){
+    if(!iso) return '';
+    const parts = String(iso).slice(0,10).split('-');
+    if(parts.length === 3) return parts[2] + '/' + parts[1] + '/' + parts[0].slice(-2);
+    return iso;
+  }
+
+  function f4CalcRecipeSummary(rec, data, p){
+    const opening = f4Num(data.opening);
+    const monthStart = p.year + '-' + String(p.month).padStart(2,'0') + '-01';
+    const monthEnd = p.year + '-' + String(p.month).padStart(2,'0') + '-' + String(f4DaysIn(p.year, p.month)).padStart(2,'0');
+    
+    // receipts group by date
+    const recByDate = {};
+    let prevMonthRecv = 0;
+    (data.receipts || []).forEach(r => {
+      if(!r.date) return;
+      const dstr = String(r.date).slice(0,10);
+      const qty = f4Num(r.qty);
+      if(dstr < monthStart) prevMonthRecv += qty;
+      else recByDate[dstr] = (recByDate[dstr] || 0) + qty;
+    });
+    
+    let balance = opening;
+    let totalRecv = 0, totalDist = 0;
+    const rows = [];
+    
+    p.daily.forEach((r, idx) => {
+      const isHoliday = r.holiday || r.dow === 0;
+      const applicable = !isHoliday && rec.days.indexOf(r.dow) !== -1;
+      let todayRecv = recByDate[r.date] || 0;
+      // पहले दिन पिछले महीने की receipt जोड़ें
+      if(idx === 0 && prevMonthRecv > 0) todayRecv += prevMonthRecv;
+      totalRecv += todayRecv;
+      
+      const totalStock = balance + todayRecv;
+      let dist = 0;
+      if(applicable && f4Num(r.total) > 0){
+        const need = f4Num(r.total) * 0.060;
+        dist = Math.min(need, totalStock);
+      }
+      const closing = Math.max(0, totalStock - dist);
+      totalDist += dist;
+      
+      const inactive = (!applicable && todayRecv === 0);
+      rows.push('<tr class="' + (inactive ? 'f4-inactive' : '') + '">' +
+        '<td>' + String(r.day).padStart(2,'0') + '/' + String(p.month).padStart(2,'0') + '</td>' +
+        '<td>' + balance.toFixed(3) + '</td>' +
+        '<td>' + (todayRecv > 0 ? todayRecv.toFixed(3) : '—') + '</td>' +
+        '<td>' + totalStock.toFixed(3) + '</td>' +
+        '<td>' + (applicable && dist > 0 ? dist.toFixed(3) : '—') + '</td>' +
+        '<td>' + closing.toFixed(3) + '</td>' +
+        '</tr>');
+      
+      balance = closing;
+    });
+    
+    const text = '<b>प्रा. शेष:</b> ' + opening.toFixed(3) +
+      ' · <b>कुल प्राप्ति:</b> ' + totalRecv.toFixed(3) +
+      ' · <b>कुल वितरण:</b> ' + totalDist.toFixed(3) +
+      ' · <b>अ.शेष:</b> ' + balance.toFixed(3) + ' किलो' +
+      '<br><span style="color:#a07613;">⚠️ अ.शेष अगले माह auto carry forward नहीं होगा — वहाँ manual opening भरें।</span>';
+    
+    return { rows: rows.join(''), text, opening, totalRecv, totalDist, closing: balance };
+  }
+
+  function f4RefreshRecipePreview(code){
+    const rec = F4_RECIPES.find(r => r.code === code);
+    if(!rec) return;
+    const p = ReportsMenu.f4Payload;
+    const data = (p.recipe_data && p.recipe_data[code]) || {opening: 0, receipts: []};
+    const summary = f4CalcRecipeSummary(rec, data, p);
+    const acc = document.querySelector('.f4-recipe-acc[data-rec="' + code + '"]');
+    if(!acc) return;
+    
+    const listEl = acc.querySelector('[data-reclist="' + code + '"]');
+    if(listEl){
+      listEl.innerHTML = (data.receipts || []).length
+        ? (data.receipts || []).map((r, i) =>
+            '<div class="f4-receipt-item"><span>📦 ' + f4FormatDate(r.date) + ' — ' + f4Num(r.qty).toFixed(3) + ' किलो</span>' +
+            '<button type="button" data-f4del-rec="' + code + '" data-idx="' + i + '">🗑 हटाएँ</button></div>'
+          ).join('')
+        : '<div style="color:#8a8e97;font-size:12px;padding:6px 0;">कोई प्राप्ति नहीं जोड़ी गई।</div>';
+      listEl.querySelectorAll('[data-f4del-rec]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx, 10);
+          data.receipts.splice(idx, 1);
+          f4RefreshRecipePreview(code);
+        });
+      });
+    }
+    
+    const tbody = acc.querySelector('.f4-mini-table tbody');
+    if(tbody) tbody.innerHTML = summary.rows;
+    const sumEl = acc.querySelector('.f4-rec-summary');
+    if(sumEl) sumEl.innerHTML = summary.text;
+    
+    const rdateEl = acc.querySelector('.f4-rec-rdate[data-rec="' + code + '"]');
+    const rqtyEl = acc.querySelector('.f4-rec-rqty[data-rec="' + code + '"]');
+    if(rdateEl) rdateEl.value = '';
+    if(rqtyEl) rqtyEl.value = '';
+  }
+
+  window.renderForm4Form = async function(mode){
+    const root = document.getElementById('viewRoot');
+    if(!root) return;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+
+    ReportsMenu.f4Mode = mode;
+    ReportsMenu.f4Step = 1;
+    ReportsMenu.f4OpenRecipe = null;
+
+    // पहले current month का draft देखो
+    const draftKey = 'f4_draft_' + year + '_' + month;
+    let loadedFromDraft = false;
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if(saved){
+        const parsed = JSON.parse(saved);
+        if(parsed && parsed.daily && parsed.daily.length){
+          ReportsMenu.f4Payload = parsed;
+          if(!ReportsMenu.f4Payload.recipe_data) ReportsMenu.f4Payload.recipe_data = {};
+          F4_RECIPES.forEach(r => {
+            if(!ReportsMenu.f4Payload.recipe_data[r.code]){
+              ReportsMenu.f4Payload.recipe_data[r.code] = {opening:0, receipts:[]};
+            }
+          });
+          loadedFromDraft = true;
+          ReportsMenu.f4Message = '✓ पिछला draft load हो गया';
+        }
+      }
+    } catch(e){ console.warn('Draft load fail:', e); }
+
+    if(!loadedFromDraft){
+      ReportsMenu.f4Payload = window.f4DefaultPayload(year, month);
+      try {
+        const prevM = month === 1 ? 12 : month - 1;
+        const prevY = month === 1 ? year - 1 : year;
+        const d = await api('/api/reports/FORM4/draft?year=' + prevY + '&month=' + prevM);
+        if(d && d.draft && d.draft.centre){
+          ReportsMenu.f4Payload.centre = Object.assign({}, d.draft.centre);
+        }
+      } catch(e){ /* no draft */ }
+      ReportsMenu.f4Message = '';
+    }
+
+    await f4LoadHolidays(true);
+    renderF4Wizard();
+  };
+
+  function renderF4Wizard(){
+    const root = document.getElementById('viewRoot');
+    if(!root) return;
+    const p = ReportsMenu.f4Payload;
+    const step = ReportsMenu.f4Step || 1;
+    const monthName = F4_MONTHS[(p.month||1)-1];
+    const steps = [
+      {n:1, t:'मूल जानकारी', s:'Basic'},
+      {n:2, t:'B / G / T',   s:'Daily'},
+      {n:3, t:'Recipe विवरण', s:'Recipes'},
+      {n:4, t:'जाँचें और Save', s:'Final'}
+    ];
+
+    let bodyHtml = '';
+    if(step === 1) bodyHtml = f4Step1Html(p);
+    else if(step === 2) bodyHtml = f4Step2Html(p);
+    else if(step === 3) bodyHtml = f4Step3Html(p);
+    else bodyHtml = f4Step4Html(p);
+
+    root.innerHTML = `
+      <div class="reports-header">
+        <div>
+          <h2>Form No. 4</h2>
+          <div class="sub">${monthName} ${p.year} · Step ${step} of 4</div>
+        </div>
+        <div class="header-actions">
+          <button class="back-btn" id="f4Back">← Back</button>
+        </div>
+      </div>
+      <div class="reports-main">
+        <div class="f4-stepper">
+          ${steps.map(s => `
+            <button class="f4-step ${step===s.n?'active':(step>s.n?'done':'')}" data-f4step="${s.n}">
+              <span class="f4-step-no">${step>s.n?'✓':s.n}</span>
+              <span class="f4-step-body">
+                <span class="f4-step-title">${s.t}</span>
+                <span class="f4-step-sub">${s.s}</span>
+              </span>
+            </button>
+          `).join('')}
+        </div>
+        <div id="f4Body">${bodyHtml}</div>
+        <div class="f4-nav">
+          <button class="stock-btn stock-btn-secondary" id="f4Prev" ${step<=1?'disabled':''}>← Previous</button>
+          <button class="stock-btn stock-btn-primary" id="f4Next" ${step>=4?'disabled':''}>Next →</button>
+        </div>
+      </div>
+    `;
+
+    let f4NavLock = false;
+    root.querySelectorAll('[data-f4step]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if(f4NavLock) return;
+        f4NavLock = true;
+        try { f4CaptureInputs(); } catch(e){}
+        ReportsMenu.f4Step = parseInt(btn.dataset.f4step, 10);
+        renderF4Wizard();
+        setTimeout(() => { f4NavLock = false; }, 150);
+      });
+    });
+    document.getElementById('f4Back').addEventListener('click', () => {
+      ReportsMenu.view = 'form';
+      ReportsMenu.type = 'FORM4';
+      renderFormLanding('FORM4');
+    });
+    document.getElementById('f4Prev').addEventListener('click', () => {
+      if(ReportsMenu.f4Step > 1){ ReportsMenu.f4Step--; renderF4Wizard(); }
+    });
+    document.getElementById('f4Next').addEventListener('click', () => {
+      f4CaptureInputs();
+      if(ReportsMenu.f4Step < 4){ ReportsMenu.f4Step++; renderF4Wizard(); }
+    });
+
+    f4BindStepHandlers();
+  }
+
+  function f4Step1Html(p){
+    const c = p.centre || {};
+    return `
+      <div class="form-landing-card">
+        <h3>1. मूल जानकारी</h3>
+        <div class="f4-grid">
+          <div><label>केन्द्र का नाम</label><input id="f4Name" value="${f4Esc(c.name)}"></div>
+          <div><label>कोड</label><input id="f4Code" value="${f4Esc(c.code)}"></div>
+          <div><label>परियोजना</label><input id="f4Project" value="${f4Esc(c.project_name)}"></div>
+          <div><label>सेक्टर</label><input id="f4Sector" value="${f4Esc(c.sector_name)}"></div>
+          <div><label>जिला</label><input id="f4District" value="${f4Esc(c.district)}"></div>
+          <div><label>माह</label>
+            <select id="f4Month">${F4_MONTHS.map((m,i)=>`<option value="${i+1}" ${(i+1)===p.month?'selected':''}>${m}</option>`).join('')}</select>
+          </div>
+          <div><label>वर्ष</label><input id="f4Year" type="number" value="${p.year}"></div>
+        </div>
+        <div class="f4-note">पिछले महीने की जानकारी auto भर दी गई है — जरूरत हो तो बदलें।</div>
+      </div>
+    `;
+  }
+
+  function f4Step2Html(p){
+    const rows = p.daily.map(r => {
+      const locked = r.dow === 0 || !!r.holiday;
+      const hname = r.holiday && r.holiday.name ? r.holiday.name : (r.dow === 0 ? 'रविवार' : '');
+      const dateLbl = String(r.day).padStart(2,'0')+'/'+String(p.month).padStart(2,'0')+'/'+p.year;
+      if(locked){
+        return `<tr class="f4-locked">
+          <td>${r.day}</td>
+          <td>${dateLbl}</td>
+          <td>${F4_DAYS[r.dow]}</td>
+          <td colspan="3">🔒 ${f4Esc(hname)}</td>
+        </tr>`;
+      }
+      return `<tr data-day="${r.day}">
+        <td>${r.day}</td>
+        <td>${dateLbl}</td>
+        <td>${F4_DAYS[r.dow]}</td>
+        <td><input type="number" min="0" class="f4-b" data-day="${r.day}" value="${f4Esc(r.boys)}"></td>
+        <td><input type="number" min="0" class="f4-g" data-day="${r.day}" value="${f4Esc(r.girls)}"></td>
+        <td><input type="number" disabled class="f4-t" data-day="${r.day}" value="${f4Esc(r.total)}"></td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="form-landing-card">
+      <h3>2. B / G / T दैनिक प्रविष्टि</h3>
+      <p style="color:#666;margin-bottom:10px;">हर कार्य दिवस के लिए लड़के (B), लड़कियाँ (G) भरें — T अपने आप जुड़ जाएगा।</p>
+      <div class="f4-bgt-wrap">
+        <table class="f4-bgt-table">
+          <thead><tr><th>क्र.</th><th>दिनांक</th><th>वार</th><th>B</th><th>G</th><th>T</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="f4-lock-note">🔒 रविवार और घोषित Holiday में entry स्वतः बंद रहती है (Holiday menu से auto sync होती है)।</div>
+    </div>`;
+  }
+  function f4Step3Html(p){
+    if(!p.recipe_data) p.recipe_data = F4_RECIPES.reduce((a, r) => { a[r.code] = {opening: 0, receipts: []}; return a; }, {});
+    const monthName = F4_MONTHS[(p.month||1)-1];
+    const cards = F4_RECIPES.map(rec => {
+      const data = p.recipe_data[rec.code] || {opening: 0, receipts: []};
+      const isOpen = ReportsMenu.f4OpenRecipe === rec.code;
+      const summary = f4CalcRecipeSummary(rec, data, p);
+      return `
+        <div class="f4-recipe-acc ${isOpen?'open':''}" data-rec="${rec.code}">
+          <button class="f4-recipe-header" data-f4acc="${rec.code}">
+            <span>${rec.name} <small style="color:#718298;font-weight:500;">(${rec.weight} × 60g rule)</small></span>
+            <span class="f4-arrow">▾</span>
+          </button>
+          <div class="f4-recipe-body">
+            <div class="f4-open-row">
+              <div>
+                <label>प्रा. शेष (1 ${monthName}) — किलो</label>
+                <input type="number" step="0.001" class="f4-rec-opening" data-rec="${rec.code}" value="${data.opening || ''}" placeholder="0.000">
+              </div>
+              <div>
+                <label>इकाई</label>
+                <input type="text" value="किलो (kg)" disabled>
+              </div>
+            </div>
+            <div class="f4-receipt-add">
+              <div>
+                <label>प्राप्ति दिनांक</label>
+                <input type="date" class="f4-rec-rdate" data-rec="${rec.code}">
+              </div>
+              <div>
+                <label>मात्रा (किलो)</label>
+                <input type="number" step="0.001" class="f4-rec-rqty" data-rec="${rec.code}" placeholder="0.000">
+              </div>
+              <button type="button" data-f4add-rec="${rec.code}">➕ जोड़ें</button>
+            </div>
+            <div class="f4-receipt-list" data-reclist="${rec.code}">
+              ${(data.receipts || []).length ? (data.receipts || []).map((r, i) => `
+                <div class="f4-receipt-item">
+                  <span>📦 ${f4FormatDate(r.date)} — ${f4Num(r.qty).toFixed(3)} किलो</span>
+                  <button type="button" data-f4del-rec="${rec.code}" data-idx="${i}">🗑 हटाएँ</button>
+                </div>
+              `).join('') : '<div style="color:#8a8e97;font-size:12px;padding:6px 0;">कोई प्राप्ति नहीं जोड़ी गई।</div>'}
+            </div>
+            <div class="f4-mini-wrap">
+              <table class="f4-mini-table">
+                <thead><tr><th>दिनांक</th><th>प्रा.शेष</th><th>प्राप्ति</th><th>योग</th><th>वितरण</th><th>अ.शेष</th></tr></thead>
+                <tbody>${summary.rows}</tbody>
+              </table>
+            </div>
+            <div class="f4-rec-summary">${summary.text}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    return `<div class="form-landing-card">
+      <h3>3. Recipe विवरण</h3>
+      <p style="color:#666;margin-bottom:10px;">हर recipe के लिए opening और receipts भरें — वितरण और अ.शेष auto गिना जाएगा (60g × T rule)। एक बार में एक recipe खुलती है।</p>
+      ${cards}
+    </div>`;
+  }
+  function f4Step4Html(p){
+    const preview = f4SheetHtml(p, false);
+    const status = ReportsMenu.f4Message || '';
+    return `<div class="form-landing-card">
+      <h3>4. जाँचें और Save करें</h3>
+      <p style="color:#666;margin-bottom:10px;">नीचे live preview देखें — इसके बाद Save / Send / Print करें।</p>
+      <div class="stock-btn-row" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+        <button class="stock-btn stock-btn-secondary" id="f4SaveDraft">💾 Save Draft</button>
+        <button class="stock-btn stock-btn-primary" id="f4SendRegister">📤 Save & Send to Monthly Register</button>
+        <button class="stock-btn stock-btn-secondary" id="f4PrintBtn">🖨️ Print / Save as PDF</button>
+      </div>
+      <div style="margin-bottom:10px;">
+        <label style="font-size:12px;font-weight:700;color:#52635d;display:block;margin-bottom:4px;">विशेष विवरण (Summary के दाएँ column में दिखेगा)</label>
+        <input type="text" id="f4SpecialDetails" value="${f4Esc(p.special_details || '')}" placeholder="जैसे: मंगल पहाड़ TMB के साथ मदद मिला" style="width:100%;padding:8px 10px;border:1px solid #cfdcd7;border-radius:8px;font-size:13px;box-sizing:border-box;">
+      </div>
+      <div class="f4-status" style="padding:8px 10px;border-radius:8px;font-size:12px;min-height:20px;${status ? 'background:#edf9f0;border:1px solid #b8dfc2;color:#16723a;' : 'display:none;'}">${f4Esc(status)}</div>
+      <div class="f4-preview-box" style="margin-top:12px;background:#e4e8e4;border-radius:12px;padding:10px;overflow:auto;">
+        ${preview}
+      </div>
+    </div>`;
+  }
+
+  // ===== Recipe daily compute =====
+  function f4ComputeAllRecipes(p){
+    const result = {};
+    const monthStart = p.year + '-' + String(p.month).padStart(2,'0') + '-01';
+    const days = f4DaysIn(p.year, p.month);
+    F4_RECIPES.forEach(rec => {
+      const data = (p.recipe_data && p.recipe_data[rec.code]) || {opening:0, receipts:[]};
+      const recByDate = {};
+      let prevMonthRecv = 0;
+      (data.receipts || []).forEach(r => {
+        if(!r.date) return;
+        const ds = String(r.date).slice(0,10);
+        const q = f4Num(r.qty);
+        if(ds < monthStart) prevMonthRecv += q;
+        else recByDate[ds] = (recByDate[ds] || 0) + q;
+      });
+      // महीने का पहला working day ढूँढो (Sunday/Holiday छोड़कर)
+      let firstWorkingDate = null;
+      for(let d=1; d<=days; d++){
+        const row = p.daily[d-1];
+        if(!row) continue;
+        const isLocked = row.dow === 0 || !!row.holiday;
+        if(!isLocked){ firstWorkingDate = row.date; break; }
+      }
+      
+      let balance = f4Num(data.opening);
+      const daily = {};
+      let tRecv = 0, tDist = 0;
+      for(let d=1; d<=days; d++){
+        const row = p.daily[d-1];
+        if(!row) continue;
+        const isLocked = row.dow === 0 || !!row.holiday;
+        const applicable = !isLocked && rec.days.indexOf(row.dow) !== -1;
+        let todayRecv = recByDate[row.date] || 0;
+        if(d === 1 && prevMonthRecv > 0) todayRecv += prevMonthRecv;
+        
+        const isFirstWorkingDay = (row.date === firstWorkingDate);
+        
+        // Non-applicable AND not first working day → सब dashes, balance track
+        if(!applicable && !isFirstWorkingDay){
+          balance = balance + todayRecv;
+          tRecv += todayRecv;
+          daily[row.date] = {opening: null, received: null, total: null, distribution: null, closing: null};
+          continue;
+        }
+        
+        // Applicable OR पहला working day → सारे numbers, distribution असली
+        const totalStock = balance + todayRecv;
+        let dist = 0;
+        if(applicable && f4Num(row.total) > 0){
+          dist = Math.min(f4Num(row.total) * 0.060, totalStock);
+        }
+        const closing = Math.max(0, totalStock - dist);
+        tRecv += todayRecv; tDist += dist;
+        daily[row.date] = {
+          opening: balance, received: todayRecv, total: totalStock,
+          distribution: applicable ? dist : null,
+          closing
+        };
+        balance = closing;
+      }
+      result[rec.code] = {
+        daily,
+        totals: {opening: f4Num(data.opening), received: tRecv, distribution: tDist, closing: balance}
+      };
+    });
+    return result;
+  }
+
+  // ===== Sheet HTML (Preview + Print) =====
+  function f4SheetHtml(p, blankMode){
+    const c = p.centre || {};
+    const m = p.month, y = p.year;
+    const days = f4DaysIn(y, m);
+    const monthName = F4_MONTHS[m-1];
+    const allCodes = ['SWEET_MURMURA','SALTY_MURMURA','KHICHDI','SWEET_DALIA','UPMA'];
+    const breakfastCodes = ['SWEET_MURMURA','SALTY_MURMURA'];
+    const hotCodes = ['KHICHDI','SWEET_DALIA','UPMA'];
+    const comp = blankMode ? {} : f4ComputeAllRecipes(p);
+
+    const fmtKg = (v) => v == null || v === 0 ? '—' : f4Num(v).toFixed(3);
+
+    let html = '<div class="f4-sheet">';
+    html += '<div class="f4-sheet-header"><h1>कार्यालय बाल विकास परियोजना अधिकारी, गुडामालानी</h1><h2>प्रपत्र - 4</h2><div class="f4-sheet-sub">पूरक पोषण वितरण (दैनिक) मासिक प्रगति रिपोर्ट</div></div>';
+
+    html += '<div class="f4-sheet-meta">' +
+      '<span>आंगनवाड़ी केन्द्र का नाम - <u>' + f4Esc(blankMode?'':c.name||'') + '</u></span>' +
+      '<span>परियोजना - <u>' + f4Esc(blankMode?'':c.project_name||'') + '</u></span>' +
+      '<span>सेक्टर - <u>' + f4Esc(blankMode?'':c.sector_name||'') + '</u></span>' +
+      '<span>कोड - <u>' + f4Esc(blankMode?'':c.code||'') + '</u></span>' +
+      '<span>माह - <u>' + f4Esc(blankMode?'':monthName) + '</u></span>' +
+      '<span>वर्ष - <u>' + f4Esc(blankMode?'':y) + '</u></span>' +
+      '</div>';
+
+    // Table head
+    html += '<table class="f4-sheet-table"><colgroup>';
+    html += '<col style="width:2.8%"><col style="width:4.5%"><col style="width:5%">';
+    html += '<col style="width:2%"><col style="width:2%"><col style="width:2%">';
+    for(let i=0; i<5; i++){ for(let j=0;j<5;j++){ html += '<col style="width:3.06%">'; } }
+    html += '</colgroup>';
+    html += '<thead>';
+    html += '<tr>';
+    html += '<th rowspan="3">क्र.सं.</th>';
+    html += '<th rowspan="3">दिनांक</th>';
+    html += '<th rowspan="3">वार</th>';
+    html += '<th colspan="3" class="f4-bgt-top">लाभान्वित बच्चों की संख्या</th>';
+    html += '<th colspan="10">नाश्ता (प्रति बच्चा 60 ग्राम) (किलो ग्राम में)</th>';
+    html += '<th colspan="15">गरम खाना (प्रति बच्चा 60 ग्राम) (किलो ग्राम में)</th>';
+    html += '</tr>';
+    html += '<tr>';
+    html += '<th colspan="3" class="f4-bgt-bottom">3 से 6 वर्ष के बच्चे</th>';
+    const dayNamesHi = ['रवि','सोम','मंगल','बुध','गुरु','शुक्र','शनि'];
+    function recNameWithDays(rec){
+      const days = rec.days.map(d => dayNamesHi[d]).join(', ');
+      return f4Esc(rec.name) + ' (' + days + ')';
+    }
+    breakfastCodes.forEach(code => { const r = F4_RECIPES.find(x => x.code === code); html += '<th colspan="5">' + recNameWithDays(r) + '</th>'; });
+    hotCodes.forEach(code => { const r = F4_RECIPES.find(x => x.code === code); html += '<th colspan="5">' + recNameWithDays(r) + '</th>'; });
+    html += '</tr>';
+    html += '<tr>';
+    html += '<th>B</th><th>G</th><th>T</th>';
+    for(let i=0; i<5; i++){ html += '<th>प्रा.शेष</th><th>प्राप्ति</th><th>योग</th><th>वितरण</th><th>अ.शेष</th>'; }
+    html += '</tr></thead><tbody>';
+
+    // Totals — Summary correct values (comp से सीधे, last-day overwrite नहीं)
+    const tot = {b:0,g:0,t:0};
+    const recTotals = {};
+    allCodes.forEach(code => {
+      const cdata = comp[code] || {};
+      const dailyMap = cdata.daily || {};
+      const keys = Object.keys(dailyMap).sort();
+      const firstDay = keys.length ? dailyMap[keys[0]] : {};
+      const lastDay = keys.length ? dailyMap[keys[keys.length - 1]] : {};
+      const t = cdata.totals || {};
+      const firstOpening = firstDay.opening != null ? firstDay.opening : (t.opening || 0);
+      const lastClosing = lastDay.closing != null ? lastDay.closing : (t.closing || 0);
+      recTotals[code] = {
+        opening: firstOpening,
+        received: t.received || 0,
+        total: firstOpening + (t.received || 0),
+        distribution: t.distribution || 0,
+        closing: lastClosing
+      };
+    });
+
+    // Rows
+    for(let d=1; d<=days; d++){
+      const row = p.daily[d-1]; if(!row) continue;
+      const isLocked = row.dow === 0 || !!row.holiday;
+      const dstr = String(d).padStart(2,'0') + '/' + String(m).padStart(2,'0') + '/' + String(y).slice(-2);
+      if(isLocked){
+        const hname = row.holiday ? row.holiday.name : 'रविवार';
+        const strip = '<div class="f4-holiday-strip">' +
+          '<i></i><b>' + f4Esc(hname) + '</b>' +
+          '<i></i><b>' + f4Esc(hname) + '</b>' +
+          '<i></i><b>' + f4Esc(hname) + '</b>' +
+          '<i></i></div>';
+        html += '<tr class="f4-sheet-holiday"><td>' + d + '</td><td>' + dstr + '</td><td>' + F4_DAYS[row.dow] + '</td><td colspan="28" class="f4-sheet-holiday-bar">' + strip + '</td></tr>';
+        continue;
+      }
+      tot.b += f4Num(row.boys); tot.g += f4Num(row.girls); tot.t += f4Num(row.total);
+      html += '<tr><td>' + d + '</td><td>' + dstr + '</td><td>' + F4_DAYS[row.dow] + '</td>';
+      html += '<td>' + (blankMode?'':f4Esc(row.boys||'—')) + '</td>';
+      html += '<td>' + (blankMode?'':f4Esc(row.girls||'—')) + '</td>';
+      html += '<td><b>' + (blankMode?'':f4Esc(row.total||'—')) + '</b></td>';
+      allCodes.forEach(code => {
+        const dv = (comp[code] && comp[code].daily[row.date]) || {};
+        // सिर्फ display — recTotals अब अलग calculate होता है
+        html += '<td>' + (blankMode?'':(dv.opening != null ? fmtKg(dv.opening) : '—')) + '</td>';
+        html += '<td>' + (blankMode?'':(dv.received != null && dv.received > 0 ? fmtKg(dv.received) : '—')) + '</td>';
+        html += '<td>' + (blankMode?'':(dv.total != null ? fmtKg(dv.total) : '—')) + '</td>';
+        html += '<td>' + (blankMode?'':(dv.distribution != null && dv.distribution > 0 ? fmtKg(dv.distribution) : '—')) + '</td>';
+        html += '<td>' + (blankMode?'':(dv.closing != null ? fmtKg(dv.closing) : '—')) + '</td>';
+      });
+      html += '</tr>';
+    }
+
+    // Total row
+    html += '<tr class="f4-sheet-total"><td colspan="3">योग</td>';
+    html += '<td>' + (blankMode?'':tot.b) + '</td><td>' + (blankMode?'':tot.g) + '</td><td>' + (blankMode?'':tot.t) + '</td>';
+    allCodes.forEach(code => {
+      const r = recTotals[code];
+      html += '<td>' + (blankMode?'':fmtKg(r.opening)) + '</td>';
+      html += '<td>' + (blankMode?'':fmtKg(r.received)) + '</td>';
+      html += '<td>' + (blankMode?'':fmtKg(r.total)) + '</td>';
+      html += '<td>' + (blankMode?'':fmtKg(r.distribution)) + '</td>';
+      html += '<td>' + (blankMode?'':(r.closing > 0 ? fmtKg(r.closing) : 'NIL')) + '</td>';
+    });
+    html += '</tr></tbody></table>';
+
+    // ===== MONTHLY SUMMARY — COLUMN-WISE (5 recipes as columns) =====
+    const summaryRecipes = ['SWEET_MURMURA','SALTY_MURMURA','KHICHDI','SWEET_DALIA','UPMA'];
+    const recipeNames = {
+      'SWEET_MURMURA':'मीठा मुरमुरा',
+      'SALTY_MURMURA':'नमकीन मुरमुरा',
+      'KHICHDI':'खिचड़ी',
+      'SWEET_DALIA':'मीठा दलिया',
+      'UPMA':'उपमा'
+    };
+
+    const vOpen = [], vRecv = [], vTotal = [], vDist = [], vClose = [], vDate = [];
+    summaryRecipes.forEach(code => {
+      const t = recTotals[code];
+      const lastRec = (p.recipe_data && p.recipe_data[code] && p.recipe_data[code].receipts || []).slice(-1)[0];
+      vOpen.push(t.opening.toFixed(3));
+      vRecv.push(t.received.toFixed(3));
+      vTotal.push(t.total.toFixed(3));
+      vDist.push(t.distribution.toFixed(3));
+      vClose.push(t.closing.toFixed(3));
+      vDate.push(lastRec ? f4FormatDate(lastRec.date) : '—');
+    });
+
+    const summaryRows = [
+      ['प्रा.शेष', vOpen],
+      ['प्राप्ति', vRecv],
+      ['कुल', vTotal],
+      ['वितरण', vDist],
+      ['अ.शेष', vClose],
+      ['प्राप्ति दिनांक', vDate]
+    ];
+
+    let sumHtml = '<table class="f4-summary-table"><colgroup>';
+    sumHtml += '<col style="width:15%">';
+    for(let i=0;i<5;i++) sumHtml += '<col style="width:14.6%">';
+    sumHtml += '<col style="width:12%">';
+    sumHtml += '</colgroup>';
+    sumHtml += '<thead><tr><th>मासिक सारांश</th>';
+    summaryRecipes.forEach(code => { sumHtml += '<th>' + f4Esc(recipeNames[code]) + '</th>'; });
+    sumHtml += '<th>विशेष विवरण</th></tr></thead><tbody>';
+    summaryRows.forEach((r, ri) => {
+      sumHtml += '<tr><td>' + r[0] + '</td>';
+      r[1].forEach(v => { sumHtml += '<td>' + (blankMode?'':v) + '</td>'; });
+      if(ri === 0){
+        sumHtml += '<td class="f4-special-cell" rowspan="6">' + (blankMode?'':f4Esc(p.special_details || 'मंगल पहाड़ TMB के साथ मदद मिला')) + '</td>';
+      }
+      sumHtml += '</tr>';
+    });
+    sumHtml += '</tbody></table>';
+
+    html += '<div class="f4-sheet-summary"><div>' + sumHtml + '</div>' +
+      '<div class="f4-sheet-sign"><div class="f4-sig-line"></div><div class="f4-sig-lbl">हस्ताक्षर आंगनवाड़ी कार्यकर्ता</div></div>' +
+      '</div>';
+
+    html += '</div>';
+    return html;
+  }
+
+  // ===== Print =====
+  function f4Print(){
+    const sheet = document.querySelector('.f4-preview-box .f4-sheet');
+    if(!sheet){ alert('Preview उपलब्ध नहीं है।'); return; }
+    const html = sheet.outerHTML;
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument;
+    doc.open();
+    doc.write('<!doctype html><html><head><meta charset="utf-8">' +
+      '<style>@page{size:A4 landscape;margin:4mm;}' +
+      'html,body{margin:0;padding:0;background:#fff;}' +
+      'body *{visibility:hidden!important;}' +
+      '.f4-sheet,.f4-sheet *{visibility:visible!important;}' +
+      '.f4-sheet{position:absolute!important;left:0!important;top:0!important;width:289mm!important;padding:3mm 4mm!important;box-sizing:border-box!important;}' +
+      '</style>' +
+      '<link rel="stylesheet" href="/form4-print.css">' +
+      '</head><body>' + html + '</body></html>');
+    doc.close();
+    const cleanup = () => { if(iframe.parentNode) iframe.parentNode.removeChild(iframe); };
+    try { iframe.contentWindow.addEventListener('afterprint', cleanup, {once:true}); } catch(e){}
+    setTimeout(() => { try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch(e){} }, 500);
+    setTimeout(cleanup, 60000);
+  }
+
+  // ===== Save Draft (local) =====
+  function f4SaveDraft(){
+    const p = ReportsMenu.f4Payload;
+    try {
+      const key = 'f4_draft_' + p.year + '_' + p.month;
+      localStorage.setItem(key, JSON.stringify(p));
+      ReportsMenu.f4Message = '✓ Draft saved locally (' + new Date().toLocaleTimeString('en-IN') + ')';
+      renderF4Wizard();
+    } catch(e){ alert('Draft save fail: ' + e.message); }
+  }
+
+  // ===== Save & Send to Monthly Register =====
+  async function f4SendRegister(){
+    const p = ReportsMenu.f4Payload;
+    try {
+      const payload = {
+        year: p.year, month: p.month, mode: 'MANUAL',
+        payload: p, centre_id: (ReportsMenu.centreId || null)
+      };
+      const r = await api('/api/reports/FORM4/send-to-register', {method:'POST', body: JSON.stringify(payload)});
+      ReportsMenu.f4Message = r.createdVersion
+        ? '✓ Saved & Sent — Version created'
+        : '✓ Already up to date — same version exists';
+      renderF4Wizard();
+    } catch(e){
+      alert('Send fail: ' + (e.message || 'Unknown'));
+    }
+  }
+
+  function f4CaptureInputs(){
+    const p = ReportsMenu.f4Payload;
+    const step = ReportsMenu.f4Step;
+    if(step === 1){
+      const el = id => document.getElementById(id);
+      p.centre.name = el('f4Name')?.value || '';
+      p.centre.code = el('f4Code')?.value || '';
+      p.centre.project_name = el('f4Project')?.value || '';
+      p.centre.sector_name = el('f4Sector')?.value || '';
+      p.centre.district = el('f4District')?.value || '';
+      p.month = parseInt(el('f4Month')?.value, 10) || p.month;
+      p.year = parseInt(el('f4Year')?.value, 10) || p.year;
+    }
+    // Auto-save draft
+    try {
+      const key = 'f4_draft_' + p.year + '_' + p.month;
+      localStorage.setItem(key, JSON.stringify(p));
+    } catch(e){}
+  }
+
+  function f4BindStepHandlers(){
+    const step = ReportsMenu.f4Step;
+    if(step === 2){
+      document.querySelectorAll('.f4-b, .f4-g').forEach(inp => {
+        inp.addEventListener('input', () => {
+          const day = parseInt(inp.dataset.day, 10);
+          const p = ReportsMenu.f4Payload;
+          const row = p.daily[day-1];
+          if(!row) return;
+          const bEl = document.querySelector('.f4-b[data-day="'+day+'"]');
+          const gEl = document.querySelector('.f4-g[data-day="'+day+'"]');
+          const tEl = document.querySelector('.f4-t[data-day="'+day+'"]');
+          row.boys = bEl ? bEl.value : '';
+          row.girls = gEl ? gEl.value : '';
+          row.total = (f4Num(row.boys) + f4Num(row.girls)) || '';
+          if(tEl) tEl.value = row.total;
+          try { localStorage.setItem('f4_draft_' + p.year + '_' + p.month, JSON.stringify(p)); } catch(e){}
+        });
+      });
+    }
+    if(step === 3){
+      const p = ReportsMenu.f4Payload;
+      if(!p.recipe_data) p.recipe_data = F4_RECIPES.reduce((a, r) => { a[r.code] = {opening: 0, receipts: []}; return a; }, {});
+      
+      document.querySelectorAll('[data-f4acc]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const code = btn.dataset.f4acc;
+          ReportsMenu.f4OpenRecipe = ReportsMenu.f4OpenRecipe === code ? null : code;
+          document.querySelectorAll('.f4-recipe-acc').forEach(a => {
+            a.classList.toggle('open', a.dataset.rec === ReportsMenu.f4OpenRecipe);
+          });
+        });
+      });
+      
+      document.querySelectorAll('.f4-rec-opening').forEach(inp => {
+        inp.addEventListener('input', () => {
+          const code = inp.dataset.rec;
+          p.recipe_data[code] = p.recipe_data[code] || {opening: 0, receipts: []};
+          p.recipe_data[code].opening = f4Num(inp.value);
+          f4RefreshRecipePreview(code);
+          try { localStorage.setItem('f4_draft_' + p.year + '_' + p.month, JSON.stringify(p)); } catch(e){}
+        });
+      });
+      
+      document.querySelectorAll('[data-f4add-rec]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const code = btn.dataset.f4addRec;
+          const dateEl = document.querySelector('.f4-rec-rdate[data-rec="' + code + '"]');
+          const qtyEl = document.querySelector('.f4-rec-rqty[data-rec="' + code + '"]');
+          const date = dateEl ? dateEl.value : '';
+          const qty = f4Num(qtyEl ? qtyEl.value : 0);
+          if(!date || qty <= 0){ alert('दिनांक और मात्रा भरें (0 से बड़ी)'); return; }
+          p.recipe_data[code] = p.recipe_data[code] || {opening: 0, receipts: []};
+          p.recipe_data[code].receipts.push({date, qty});
+          p.recipe_data[code].receipts.sort((a,b) => String(a.date).localeCompare(String(b.date)));
+          f4RefreshRecipePreview(code);
+          try { localStorage.setItem('f4_draft_' + p.year + '_' + p.month, JSON.stringify(p)); } catch(e){}
+        });
+      });
+      
+      document.querySelectorAll('[data-f4del-rec]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const code = btn.dataset.f4delRec;
+          const idx = parseInt(btn.dataset.idx, 10);
+          if(p.recipe_data[code] && p.recipe_data[code].receipts){
+            p.recipe_data[code].receipts.splice(idx, 1);
+            f4RefreshRecipePreview(code);
+          }
+        });
+      });
+    }
+    if(step === 4){
+      const sBtn = document.getElementById('f4SaveDraft');
+      const sendBtn = document.getElementById('f4SendRegister');
+      const printBtn = document.getElementById('f4PrintBtn');
+      if(sBtn) sBtn.addEventListener('click', f4SaveDraft);
+      if(sendBtn) sendBtn.addEventListener('click', f4SendRegister);
+      if(printBtn) printBtn.addEventListener('click', f4Print);
+      const spEl = document.getElementById('f4SpecialDetails');
+      if(spEl){
+        spEl.addEventListener('input', () => {
+          ReportsMenu.f4Payload.special_details = spEl.value;
+          try { localStorage.setItem('f4_draft_' + p.year + '_' + p.month, JSON.stringify(p)); } catch(e){}
+          const box = document.querySelector('.f4-preview-box');
+          if(box) box.innerHTML = f4SheetHtml(p, false);
+        });
+      }
+    }
+  }
+
+  async function f4LoadHolidays(force){
+    const p = ReportsMenu.f4Payload;
+    if(!ReportsMenu.f4HolidayCache) ReportsMenu.f4HolidayCache = {};
+    const key = p.year + '-' + p.month;
+    
+    if(!force && ReportsMenu.f4HolidayCache[key]){
+      const map = ReportsMenu.f4HolidayCache[key];
+      p.daily.forEach(r => { r.holiday = map[r.date] || null; });
+      return;
+    }
+    
+    try {
+      const d = await api('/api/admin/holidays?year='+p.year+'&month='+p.month);
+      const list = Array.isArray(d.holidays) ? d.holidays : [];
+      const map = {};
+      list.forEach(h => {
+        const dt = String(h.holiday_date || h.date || '').slice(0,10);
+        if(dt) map[dt] = {name: String(h.holiday_name || h.name || 'Holiday')};
+      });
+      ReportsMenu.f4HolidayCache[key] = map;
+      p.daily.forEach(r => { r.holiday = map[r.date] || null; });
+    } catch(e) {
+      console.warn('Holiday fetch fail:', e);
+      p.daily.forEach(r => { r.holiday = null; });
+    }
+  }
+
+
 })();

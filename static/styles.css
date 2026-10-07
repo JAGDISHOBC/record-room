@@ -3383,3 +3383,72 @@ body.app-mode .msr-receipt-item{
 .milk-claim-sheet .dava-meta-value {
   font-weight: 400 !important;
 }
+
+/* ===== FORM 4 WIZARD CSS ===== */
+.f4-stepper{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;padding:6px;background:#f9fbfc;border-radius:12px;}
+.f4-step{flex:1;min-width:150px;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e0e8ef;border-radius:10px;background:#fff;cursor:pointer;text-align:left;}
+.f4-step.active{border-color:var(--rr-coral);background:#fff5f4;box-shadow:0 2px 8px rgba(223,91,85,.10);}
+.f4-step.done{border-color:#86b7a6;background:#eaf6f1;}
+.f4-step-no{width:28px;height:28px;border-radius:50%;background:#eef3f7;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;}
+.f4-step.active .f4-step-no{background:var(--rr-coral);color:#fff;}
+.f4-step.done .f4-step-no{background:#0b6b58;color:#fff;}
+.f4-step-body{display:flex;flex-direction:column;gap:1px;}
+.f4-step-title{font-size:13px;font-weight:800;color:#17324d;}
+.f4-step-sub{font-size:10px;color:#718298;}
+.f4-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px;}
+.f4-grid label{display:block;font-size:12px;font-weight:700;color:#52635d;margin-bottom:5px;}
+.f4-grid input,.f4-grid select{width:100%;padding:9px 11px;border:1px solid #cfdcd7;border-radius:9px;background:#fff;font-size:14px;box-sizing:border-box;}
+.f4-note{margin-top:12px;padding:9px 11px;background:#f0f9ff;border-left:3px solid #1769e0;border-radius:6px;font-size:12px;color:#37536e;}
+.f4-nav{display:flex;justify-content:space-between;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid #eaeef3;}
+.f4-nav .stock-btn{min-height:44px;padding:10px 18px;}
+@media(max-width:760px){.f4-grid{grid-template-columns:1fr;}.f4-step{min-width:auto;padding:8px;}.f4-step-title{font-size:11px;}.f4-step-sub{display:none;}}
+
+/* ===== FORM 4 STEP 2 — B/G/T Table ===== */
+.f4-bgt-wrap{overflow-x:auto;border:1px solid #d9e6e1;border-radius:10px;background:#fff;}
+.f4-bgt-table{width:100%;border-collapse:collapse;font-size:13px;}
+.f4-bgt-table th,.f4-bgt-table td{border:1px solid #d9e6e1;padding:8px 6px;text-align:center;}
+.f4-bgt-table th{background:#f3f7f5;font-weight:800;font-size:12px;color:#17324d;}
+.f4-bgt-table input{width:100%;max-width:80px;padding:7px 8px;border:1px solid #cfdcd7;border-radius:6px;text-align:center;font-size:13px;box-sizing:border-box;}
+.f4-bgt-table input:disabled{background:#f5f8f7;color:#8a8e97;}
+.f4-bgt-table tr.f4-locked{background:#fff4f2;}
+.f4-bgt-table tr.f4-locked td{color:#b12a23;font-weight:700;}
+.f4-bgt-table tr.f4-locked input{display:none;}
+.f4-lock-note{margin-top:10px;padding:8px 10px;background:#fff7df;border-left:3px solid #ecd28e;border-radius:6px;font-size:12px;color:#6e5815;}
+@media(max-width:760px){.f4-bgt-table{font-size:12px;}.f4-bgt-table th,.f4-bgt-table td{padding:5px 3px;}.f4-bgt-table input{max-width:60px;padding:5px;font-size:12px;}}
+
+/* ===== FORM 4 STEP 3 — Recipes Accordion ===== */
+.f4-recipe-acc{border:1px solid #d9e6e1;border-radius:12px;margin-bottom:10px;overflow:hidden;background:#fff;}
+.f4-recipe-header{display:flex;align-items:center;justify-content:space-between;width:100%;padding:12px 14px;background:#f9fbfc;border:0;cursor:pointer;font-size:14px;font-weight:800;color:#17324d;text-align:left;}
+.f4-recipe-header:hover{background:#f0f5f8;}
+.f4-recipe-header .f4-arrow{font-size:18px;color:#617287;transition:transform .2s;display:inline-block;}
+.f4-recipe-acc.open .f4-arrow{transform:rotate(180deg);}
+.f4-recipe-body{display:none;padding:14px;border-top:1px solid #e9eef3;background:#fff;}
+.f4-recipe-acc.open .f4-recipe-body{display:block;}
+
+.f4-open-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.f4-open-row label{display:block;font-size:12px;font-weight:700;color:#52635d;margin-bottom:5px;}
+.f4-open-row input{width:100%;padding:8px 10px;border:1px solid #cfdcd7;border-radius:8px;font-size:13px;box-sizing:border-box;}
+
+.f4-receipt-add{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px;padding:10px;background:#f8fbfa;border-radius:8px;}
+.f4-receipt-add label{display:block;font-size:11px;font-weight:700;color:#52635d;margin-bottom:4px;}
+.f4-receipt-add input{width:100%;padding:7px 9px;border:1px solid #cfdcd7;border-radius:7px;font-size:13px;box-sizing:border-box;}
+.f4-receipt-add button{padding:8px 12px;background:var(--rr-coral);color:#fff;border:0;border-radius:8px;font-weight:700;cursor:pointer;white-space:nowrap;}
+
+.f4-receipt-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+.f4-receipt-item{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#f7faf9;border:1px solid #e5eeea;border-radius:8px;font-size:12px;}
+.f4-receipt-item button{background:#fff1f0;color:#b12a23;border:1px solid #efc0bc;padding:4px 9px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;}
+
+.f4-mini-wrap{overflow-x:auto;border:1px solid #d9e6e1;border-radius:8px;}
+.f4-mini-table{width:100%;border-collapse:collapse;font-size:11px;min-width:520px;}
+.f4-mini-table th,.f4-mini-table td{border:1px solid #d9e6e1;padding:5px 4px;text-align:center;}
+.f4-mini-table th{background:#f3f7f5;font-weight:800;font-size:10px;color:#17324d;}
+.f4-mini-table tr.f4-inactive td{color:#a8b0b8;background:#fafbfc;}
+
+.f4-rec-summary{margin-top:10px;padding:8px 10px;background:#f0f9ff;border-left:3px solid #1769e0;border-radius:6px;font-size:12px;color:#37536e;line-height:1.5;}
+.f4-rec-summary b{color:#17324d;}
+
+@media(max-width:760px){
+  .f4-receipt-add{grid-template-columns:1fr 1fr;}
+  .f4-receipt-add button{grid-column:1 / -1;}
+  .f4-open-row{grid-template-columns:1fr;}
+}
